@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1792490842953,
+      "tag": "0000_white_raider",
+      "breakpoints": true
+    }
+  ]
+}
