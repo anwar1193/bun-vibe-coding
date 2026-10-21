@@ -80,6 +80,7 @@ REST API sederhana dengan **Bun**, **ElysiaJS**, **Drizzle ORM**, dan **MySQL**.
 | `GET` | `/` | Health check |
 | `POST` | `/api/users` | Registrasi user baru |
 | `POST` | `/api/users/login` | Login user, mengembalikan session token |
+| `GET` | `/api/users/current` | Ambil data user yang sedang login |
 
 Dokumentasi API interaktif tersedia di `http://localhost:3000/swagger`.
 
@@ -135,11 +136,52 @@ Response gagal — HTTP `401`:
 
 Pesan error ini dipakai baik untuk email yang tidak terdaftar maupun password yang salah, agar tidak membocorkan email mana yang terdaftar.
 
+### Get Current User
+
+Memerlukan header `Authorization` berisi token hasil login.
+
+```bash
+curl http://localhost:3000/api/users/current \
+  -H "Authorization: Bearer 7050b6f2-7ad3-43ad-92a1-4a3b88375691"
+```
+
+Response sukses — HTTP `200`:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "name": "eko",
+    "email": "eko@localhost",
+    "created_at": "2026-10-21 14:30:42"
+  }
+}
+```
+
+Field `created_at` memakai format MySQL (`YYYY-MM-DD HH:MM:SS`), bukan ISO 8601. Kolom `password` tidak pernah disertakan dalam response.
+
+Response gagal — HTTP `401`:
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+Status `401` dikembalikan untuk semua kondisi berikut:
+
+- Header `Authorization` tidak ada
+- Header tidak diawali `Bearer `
+- Token tidak ditemukan di tabel `sessions`
+- Session ditemukan tetapi `user_id`-nya `NULL` (user sudah dihapus)
+
+Kata `Bearer` bersifat case-insensitive, sehingga `bearer` dan `BEARER` juga diterima.
+
 ### Format Response Error
 
 | Status | Keterangan |
 |--------|------------|
-| `401` | Email atau password salah |
+| `401` | Email/password salah, atau token tidak valid |
 | `404` | Route tidak ditemukan |
 | `409` | Email sudah terdaftar |
 | `422` | Validasi request gagal |
@@ -155,7 +197,7 @@ src/
 ├── routes/
 │   └── users-route.ts        # Routing HTTP (prefix /api/users)
 ├── services/
-│   └── users-service.ts      # Logic bisnis registrasi & login
+│   └── users-service.ts      # Logic bisnis registrasi, login, current user
 └── index.ts                  # Entry point aplikasi
 drizzle/                      # File migration hasil generate
 drizzle.config.ts             # Konfigurasi Drizzle Kit
@@ -196,4 +238,5 @@ Satu user hanya memiliki satu session aktif. Setiap kali login berhasil, session
 - Password disimpan sebagai hash bcrypt (`$2b$10$...`), tidak pernah dalam bentuk plaintext.
 - **`bun run db:push` dan `bun run db:studio` tidak berfungsi pada MySQL 5.7.** Keduanya memerlukan MySQL 8.0.16+ karena mengandalkan tabel `information_schema.check_constraints`. Gunakan `bun run db:generate` + `bun run db:migrate` sebagai gantinya.
 - Validasi email memakai regex permisif (`/^[^\s@]+@[^\s@]+$/`), bukan `format: "email"`, agar domain tanpa TLD seperti `eko@localhost` dapat diterima.
-- Endpoint login hanya mengembalikan token. Belum ada middleware autentikasi untuk memvalidasi token pada request berikutnya, dan belum ada endpoint logout.
+- Endpoint `GET /api/users/current` membaca token langsung dari header pada setiap request. Belum ada middleware autentikasi global, dan belum ada endpoint logout.
+- Kolom `created_at` pada response `GET /api/users/current` diformat memakai `DATE_FORMAT` di sisi MySQL. Konversi manual di JavaScript memakai `getHours()` dan sejenisnya akan menghasilkan waktu yang meleset karena perbedaan timezone.
