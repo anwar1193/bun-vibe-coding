@@ -121,9 +121,7 @@ export async function logoutUser(
     .delete(sessions)
     .where(eq(sessions.token, token));
 
-  const affectedRows = (result as { affectedRows?: number })?.affectedRows ?? 0;
-
-  if (affectedRows === 0) {
+  if (result.affectedRows === 0) {
     return { ok: false, reason: "UNAUTHORIZED" };
   }
 

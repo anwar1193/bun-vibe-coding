@@ -81,6 +81,7 @@ REST API sederhana dengan **Bun**, **ElysiaJS**, **Drizzle ORM**, dan **MySQL**.
 | `POST` | `/api/users` | Registrasi user baru |
 | `POST` | `/api/users/login` | Login user, mengembalikan session token |
 | `GET` | `/api/users/current` | Ambil data user yang sedang login |
+| `DELETE` | `/api/users/logout` | Logout user, menghapus session token |
 
 Dokumentasi API interaktif tersedia di `http://localhost:3000/swagger`.
 
@@ -177,6 +178,43 @@ Status `401` dikembalikan untuk semua kondisi berikut:
 
 Kata `Bearer` bersifat case-insensitive, sehingga `bearer` dan `BEARER` juga diterima.
 
+### Logout User
+
+Menghapus session token dari database. Memerlukan header `Authorization`.
+
+```bash
+curl -X DELETE http://localhost:3000/api/users/logout \
+  -H "Authorization: Bearer 7050b6f2-7ad3-43ad-92a1-4a3b88375691"
+```
+
+Response sukses — HTTP `200`:
+
+```json
+{
+  "data": "OK"
+}
+```
+
+Baris session dengan token tersebut dihapus dari tabel `sessions`, sehingga token tidak dapat dipakai lagi.
+
+Response gagal — HTTP `401`:
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+Status `401` dikembalikan untuk semua kondisi berikut:
+
+- Header `Authorization` tidak ada
+- Header tidak diawali `Bearer `
+- Token tidak ditemukan di tabel `sessions` (termasuk saat logout dipanggil dua kali)
+
+Logout **tidak** bersifat idempotent: memanggilnya dua kali dengan token yang sama akan mengembalikan `401` pada panggilan kedua.
+
+Berbeda dari `GET /api/users/current`, logout **tetap menghapus** session yang `user_id`-nya `NULL` dan mengembalikan `200`. Tujuan logout adalah menghapus session, dan itu tercapai.
+
 ### Format Response Error
 
 | Status | Keterangan |
@@ -238,5 +276,5 @@ Satu user hanya memiliki satu session aktif. Setiap kali login berhasil, session
 - Password disimpan sebagai hash bcrypt (`$2b$10$...`), tidak pernah dalam bentuk plaintext.
 - **`bun run db:push` dan `bun run db:studio` tidak berfungsi pada MySQL 5.7.** Keduanya memerlukan MySQL 8.0.16+ karena mengandalkan tabel `information_schema.check_constraints`. Gunakan `bun run db:generate` + `bun run db:migrate` sebagai gantinya.
 - Validasi email memakai regex permisif (`/^[^\s@]+@[^\s@]+$/`), bukan `format: "email"`, agar domain tanpa TLD seperti `eko@localhost` dapat diterima.
-- Endpoint `GET /api/users/current` membaca token langsung dari header pada setiap request. Belum ada middleware autentikasi global, dan belum ada endpoint logout.
+- Endpoint `GET /api/users/current` dan `DELETE /api/users/logout` membaca token langsung dari header pada setiap request. Belum ada middleware autentikasi global.
 - Kolom `created_at` pada response `GET /api/users/current` diformat memakai `DATE_FORMAT` di sisi MySQL. Konversi manual di JavaScript memakai `getHours()` dan sejenisnya akan menghasilkan waktu yang meleset karena perbedaan timezone.
