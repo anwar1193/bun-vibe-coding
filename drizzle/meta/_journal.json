@@ -8,6 +8,13 @@
       "when": 1792490842953,
       "tag": "0000_white_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1792554166353,
+      "tag": "0001_optimal_spot",
+      "breakpoints": true
     }
   ]
 }
