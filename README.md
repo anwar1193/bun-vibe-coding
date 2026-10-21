@@ -7,6 +7,7 @@ REST API sederhana dengan **Bun**, **ElysiaJS**, **Drizzle ORM**, dan **MySQL**.
 - [Bun](https://bun.com) — runtime & package manager
 - [ElysiaJS](https://elysiajs.com) — web framework
 - [Drizzle ORM](https://orm.drizzle.team) — ORM & migration
+- [bcrypt](https://www.npmjs.com/package/bcrypt) — hashing password
 - MySQL — database
 
 ## Prasyarat
@@ -68,48 +69,49 @@ REST API sederhana dengan **Bun**, **ElysiaJS**, **Drizzle ORM**, dan **MySQL**.
 | `bun run typecheck` | Cek tipe TypeScript |
 | `bun run db:generate` | Generate file migration dari schema |
 | `bun run db:migrate` | Jalankan migration ke database |
-| `bun run db:push` | Push schema langsung ke database (tanpa file migration) |
-| `bun run db:studio` | Buka Drizzle Studio untuk inspeksi data |
+| `bun run db:push` | Push schema langsung ke database — **tidak jalan di MySQL 5.7** |
+| `bun run db:studio` | Buka Drizzle Studio — **tidak jalan di MySQL 5.7** |
 
 ## Endpoint
 
 | Method | Path | Keterangan |
 |--------|------|------------|
 | `GET` | `/` | Health check |
-| `GET` | `/users` | Ambil semua user |
-| `GET` | `/users/:id` | Ambil user berdasarkan id |
-| `POST` | `/users` | Tambah user baru |
-| `PUT` | `/users/:id` | Ubah data user |
-| `DELETE` | `/users/:id` | Hapus user |
+| `POST` | `/api/users` | Registrasi user baru |
 
 Dokumentasi API interaktif tersedia di `http://localhost:3000/swagger`.
 
 ### Contoh
 
 ```bash
-# Tambah user
-curl -X POST http://localhost:3000/users \
+# Registrasi user baru
+curl -X POST http://localhost:3000/api/users \
   -H "Content-Type: application/json" \
-  -d '{"name":"Munawar Ahmad","email":"munawar@example.com"}'
+  -d '{"name":"Eko","email":"eko@localhost","password":"rahasia"}'
+```
 
-# Ambil semua user
-curl http://localhost:3000/users
+Response sukses — HTTP `201`:
 
-# Ubah user
-curl -X PUT http://localhost:3000/users/1 \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Nama Baru"}'
+```json
+{
+  "data": "OK"
+}
+```
 
-# Hapus user
-curl -X DELETE http://localhost:3000/users/1
+Response gagal (email sudah terdaftar) — HTTP `409`:
+
+```json
+{
+  "error": "Email sudah terdaftar"
+}
 ```
 
 ### Format Response Error
 
 | Status | Keterangan |
 |--------|------------|
-| `404` | Data tidak ditemukan |
-| `409` | Email sudah digunakan |
+| `404` | Route tidak ditemukan |
+| `409` | Email sudah terdaftar |
 | `422` | Validasi request gagal |
 | `500` | Kesalahan internal server |
 
@@ -118,16 +120,26 @@ curl -X DELETE http://localhost:3000/users/1
 ```
 src/
 ├── db/
-│   ├── index.ts      # Koneksi database
-│   └── schema.ts     # Definisi schema Drizzle
+│   ├── index.ts              # Koneksi database
+│   └── schema.ts             # Definisi schema Drizzle
 ├── routes/
-│   └── users.ts      # Endpoint CRUD users
-└── index.ts          # Entry point aplikasi
-drizzle/              # File migration hasil generate
-drizzle.config.ts     # Konfigurasi Drizzle Kit
+│   └── users-route.ts        # Routing HTTP (prefix /api/users)
+├── services/
+│   └── users-service.ts      # Logic bisnis registrasi user
+└── index.ts                  # Entry point aplikasi
+drizzle/                      # File migration hasil generate
+drizzle.config.ts             # Konfigurasi Drizzle Kit
 ```
+
+### Pemisahan Tanggung Jawab
+
+- **`routes/`** — hanya menangani HTTP: validasi request, pemetaan status code, format response. File memakai suffix `-route.ts`.
+- **`services/`** — hanya menangani logic bisnis: query database, hashing password. Tidak boleh mengimpor `elysia`. File memakai suffix `-service.ts`.
 
 ## Catatan
 
 - File `.env` tidak di-commit ke repository. Gunakan `.env.example` sebagai template.
 - Schema menggunakan `CURRENT_TIMESTAMP` untuk kolom `created_at` agar kompatibel dengan MySQL 5.7.
+- Password disimpan sebagai hash bcrypt (`$2b$10$...`), tidak pernah dalam bentuk plaintext.
+- **`bun run db:push` dan `bun run db:studio` tidak berfungsi pada MySQL 5.7.** Keduanya memerlukan MySQL 8.0.16+ karena mengandalkan tabel `information_schema.check_constraints`. Gunakan `bun run db:generate` + `bun run db:migrate` sebagai gantinya.
+- Validasi email memakai regex permisif (`/^[^\s@]+@[^\s@]+$/`), bukan `format: "email"`, agar domain tanpa TLD seperti `eko@localhost` dapat diterima.
