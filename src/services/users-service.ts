@@ -109,3 +109,23 @@ export async function getCurrentUser(
 
   return { ok: true, user: row };
 }
+
+export type LogoutUserResult =
+  | { ok: true }
+  | { ok: false; reason: "UNAUTHORIZED" };
+
+export async function logoutUser(
+  token: string,
+): Promise<LogoutUserResult> {
+  const [result] = await db
+    .delete(sessions)
+    .where(eq(sessions.token, token));
+
+  const affectedRows = (result as { affectedRows?: number })?.affectedRows ?? 0;
+
+  if (affectedRows === 0) {
+    return { ok: false, reason: "UNAUTHORIZED" };
+  }
+
+  return { ok: true };
+}

@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { registerUser, loginUser, getCurrentUser } from "../services/users-service";
+import { registerUser, loginUser, getCurrentUser, logoutUser } from "../services/users-service";
 
 // Regex permisif: menerima domain tanpa TLD (mis. "eko@localhost") agar
 // contoh pada issue tetap valid. Cukup untuk mencegah input yang jelas salah.
@@ -69,4 +69,19 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
     }
 
     return status(200, { data: result.user });
+  })
+  .delete("/logout", async ({ headers, status }) => {
+    const token = extractBearerToken(headers.authorization);
+
+    if (!token) {
+      return status(401, { error: "Unauthorized" });
+    }
+
+    const result = await logoutUser(token);
+
+    if (!result.ok) {
+      return status(401, { error: "Unauthorized" });
+    }
+
+    return status(200, { data: "OK" });
   });
