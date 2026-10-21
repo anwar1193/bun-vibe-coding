@@ -8,6 +8,7 @@ REST API sederhana dengan **Bun**, **ElysiaJS**, **Drizzle ORM**, dan **MySQL**.
 - [ElysiaJS](https://elysiajs.com) — web framework
 - [Drizzle ORM](https://orm.drizzle.team) — ORM & migration
 - [bcrypt](https://www.npmjs.com/package/bcrypt) — hashing password
+- [uuid](https://www.npmjs.com/package/uuid) — generate session token
 - MySQL — database
 
 ## Prasyarat
@@ -78,13 +79,13 @@ REST API sederhana dengan **Bun**, **ElysiaJS**, **Drizzle ORM**, dan **MySQL**.
 |--------|------|------------|
 | `GET` | `/` | Health check |
 | `POST` | `/api/users` | Registrasi user baru |
+| `POST` | `/api/users/login` | Login user, mengembalikan session token |
 
 Dokumentasi API interaktif tersedia di `http://localhost:3000/swagger`.
 
-### Contoh
+### Registrasi User
 
 ```bash
-# Registrasi user baru
 curl -X POST http://localhost:3000/api/users \
   -H "Content-Type: application/json" \
   -d '{"name":"Eko","email":"eko@localhost","password":"rahasia"}'
@@ -106,10 +107,39 @@ Response gagal (email sudah terdaftar) — HTTP `409`:
 }
 ```
 
+### Login User
+
+```bash
+curl -X POST http://localhost:3000/api/users/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"eko@localhost","password":"rahasia"}'
+```
+
+Response sukses — HTTP `200`:
+
+```json
+{
+  "data": "7050b6f2-7ad3-43ad-92a1-4a3b88375691"
+}
+```
+
+Nilai `data` adalah UUID session token yang di-generate saat login.
+
+Response gagal — HTTP `401`:
+
+```json
+{
+  "error": "Email atau Password Salah"
+}
+```
+
+Pesan error ini dipakai baik untuk email yang tidak terdaftar maupun password yang salah, agar tidak membocorkan email mana yang terdaftar.
+
 ### Format Response Error
 
 | Status | Keterangan |
 |--------|------------|
+| `401` | Email atau password salah |
 | `404` | Route tidak ditemukan |
 | `409` | Email sudah terdaftar |
 | `422` | Validasi request gagal |
@@ -121,11 +151,11 @@ Response gagal (email sudah terdaftar) — HTTP `409`:
 src/
 ├── db/
 │   ├── index.ts              # Koneksi database
-│   └── schema.ts             # Definisi schema Drizzle
+│   └── schema.ts             # Definisi schema Drizzle (users, sessions)
 ├── routes/
 │   └── users-route.ts        # Routing HTTP (prefix /api/users)
 ├── services/
-│   └── users-service.ts      # Logic bisnis registrasi user
+│   └── users-service.ts      # Logic bisnis registrasi & login
 └── index.ts                  # Entry point aplikasi
 drizzle/                      # File migration hasil generate
 drizzle.config.ts             # Konfigurasi Drizzle Kit
@@ -134,7 +164,30 @@ drizzle.config.ts             # Konfigurasi Drizzle Kit
 ### Pemisahan Tanggung Jawab
 
 - **`routes/`** — hanya menangani HTTP: validasi request, pemetaan status code, format response. File memakai suffix `-route.ts`.
-- **`services/`** — hanya menangani logic bisnis: query database, hashing password. Tidak boleh mengimpor `elysia`. File memakai suffix `-service.ts`.
+- **`services/`** — hanya menangani logic bisnis: query database, hashing password, generate token. Tidak boleh mengimpor `elysia`. File memakai suffix `-service.ts`.
+
+## Skema Database
+
+### Tabel `users`
+
+| Kolom | Tipe | Constraint |
+|-------|------|------------|
+| `id` | `int` | AUTO_INCREMENT, PRIMARY KEY |
+| `name` | `varchar(255)` | NOT NULL |
+| `email` | `varchar(255)` | NOT NULL, UNIQUE |
+| `password` | `varchar(255)` | NOT NULL — hash bcrypt |
+| `created_at` | `timestamp` | NOT NULL, DEFAULT CURRENT_TIMESTAMP |
+
+### Tabel `sessions`
+
+| Kolom | Tipe | Constraint |
+|-------|------|------------|
+| `id` | `int` | AUTO_INCREMENT, PRIMARY KEY |
+| `token` | `varchar(255)` | NOT NULL, UNIQUE — UUID |
+| `user_id` | `int` | NULLABLE, FK ke `users.id` ON DELETE SET NULL |
+| `created_at` | `timestamp` | NOT NULL, DEFAULT CURRENT_TIMESTAMP |
+
+Satu user hanya memiliki satu session aktif. Setiap kali login berhasil, session lama user tersebut dihapus lebih dulu sebelum token baru dibuat.
 
 ## Catatan
 
@@ -143,3 +196,4 @@ drizzle.config.ts             # Konfigurasi Drizzle Kit
 - Password disimpan sebagai hash bcrypt (`$2b$10$...`), tidak pernah dalam bentuk plaintext.
 - **`bun run db:push` dan `bun run db:studio` tidak berfungsi pada MySQL 5.7.** Keduanya memerlukan MySQL 8.0.16+ karena mengandalkan tabel `information_schema.check_constraints`. Gunakan `bun run db:generate` + `bun run db:migrate` sebagai gantinya.
 - Validasi email memakai regex permisif (`/^[^\s@]+@[^\s@]+$/`), bukan `format: "email"`, agar domain tanpa TLD seperti `eko@localhost` dapat diterima.
+- Endpoint login hanya mengembalikan token. Belum ada middleware autentikasi untuk memvalidasi token pada request berikutnya, dan belum ada endpoint logout.

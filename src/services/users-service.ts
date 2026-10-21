@@ -1,7 +1,8 @@
 import bcrypt from "bcrypt";
 import { eq } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
 import { db } from "../db";
-import { users } from "../db/schema";
+import { users, sessions } from "../db/schema";
 
 const SALT_ROUNDS = 10;
 
@@ -36,4 +37,43 @@ export async function registerUser(
   });
 
   return { ok: true };
+}
+
+export type LoginUserInput = {
+  email: string;
+  password: string;
+};
+
+export type LoginUserResult =
+  | { ok: true; token: string }
+  | { ok: false; reason: "INVALID_CREDENTIALS" };
+
+export async function loginUser(
+  input: LoginUserInput,
+): Promise<LoginUserResult> {
+  const [user] = await db
+    .select({ id: users.id, password: users.password })
+    .from(users)
+    .where(eq(users.email, input.email));
+
+  if (!user) {
+    return { ok: false, reason: "INVALID_CREDENTIALS" };
+  }
+
+  const passwordMatches = await bcrypt.compare(input.password, user.password);
+
+  if (!passwordMatches) {
+    return { ok: false, reason: "INVALID_CREDENTIALS" };
+  }
+
+  await db.delete(sessions).where(eq(sessions.userId, user.id));
+
+  const token = uuidv4();
+
+  await db.insert(sessions).values({
+    token,
+    userId: user.id,
+  });
+
+  return { ok: true, token };
 }
